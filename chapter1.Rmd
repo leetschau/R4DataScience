@@ -1,0 +1,11 @@
+---
+title: "Exercises of Chapter 1"
+output: html_notebook
+---
+
+# First Steps
+
+```{r}
+library(tidyverse)
+```
+
