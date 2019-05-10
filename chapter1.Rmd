@@ -5,7 +5,68 @@ output: html_notebook
 
 # First Steps
 
+
 ```{r}
 library(tidyverse)
+ggplot(data = mpg)
+dim(mtcars)
+?mpg
+ggplot(data = mpg) +
+  geom_point(mapping = aes(x = hwy, y = cyl))
+ggplot(data = mpg) +
+  geom_point(mapping = aes(x = class, y = drv))
 ```
 
+Q1: A blank frame.
+
+Q2: `mtcars` has 32 rows and 11 columns.
+
+Q3: the description for `drv`of `mpg` dataset:
+> f = front-wheel drive, r = rear wheel drive, 4 = 4wd
+
+Q5: There's no obvious relation between `class` and `drv'.
+
+# Aesthetic Mappings
+
+Q1: 代码含义是按特征 *blue* 设置数据颜色，由于数据 *mpg* 中没有 *blue* 这个特征，
+所以所有观测的颜色都被设置为默认的红色。应改为 `... + geom_point(mapping = ..., color = "blue")`.
+
+Q2: Run `str(mpg)`, the features with type `chr` are categorical, that with type `num` or `int` are continuous.
+
+Q3:
+
+```{r}
+ggplot(data = mpg) +
+  geom_point(mapping = aes(x = displ, y = hwy, color = drv))
+ggplot(data = mpg) +
+  geom_point(mapping = aes(x = displ, y = hwy, color = cty))
+```
+
+Q4:
+
+```{r}
+ggplot(data = mpg) +
+  geom_point(mapping = aes(x = displ, y = hwy, color = drv, shape = drv))
+```
+
+
+Q5:
+
+```{r}
+ggplot(data = mpg) +
+  geom_point(mapping = aes(x = displ, y = hwy), stroke = 1)
+ggplot(data = mpg) +
+  geom_point(mapping = aes(x = displ, y = hwy), stroke = 5)
+```
+
+`stroke` (笔触，笔画宽度) control the width of the border.
+
+Q6:
+
+```{r}
+ggplot(data = mpg) +
+  geom_point(mapping = aes(x = displ, y = hwy, color = displ < 5))
+```
+
+当 aesthetic 的值不是变量名称，而是一个表达式时，
+按表达式的值（这里是 *True* 和 *False*）对每个观测赋予不同的 aesthetic （这里是颜色）。
