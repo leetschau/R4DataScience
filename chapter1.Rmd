@@ -26,7 +26,7 @@ Q3: the description for `drv`of `mpg` dataset:
 
 Q5: There's no obvious relation between `class` and `drv'.
 
-# Aesthetic Mappings
+# Aesthetic Mappings {#aesMap}
 
 Q1: 代码含义是按特征 *blue* 设置数据颜色，由于数据 *mpg* 中没有 *blue* 这个特征，
 所以所有观测的颜色都被设置为默认的红色。应改为 `... + geom_point(mapping = ..., color = "blue")`.
@@ -70,3 +70,242 @@ ggplot(data = mpg) +
 
 当 aesthetic 的值不是变量名称，而是一个表达式时，
 按表达式的值（这里是 *True* 和 *False*）对每个观测赋予不同的 aesthetic （这里是颜色）。
+
+# Facet {#facet}
+
+```{r}
+ggplot(data = mpg) +
+  geom_point(mapping = aes(x = displ, y = hwy)) +
+  facet_wrap(~ class, nrow = 2)
+
+ggplot(data = mpg) +
+  geom_point(mapping = aes(x = displ, y = hwy)) +
+  facet_grid(drv ~ cyl)
+
+ggplot(data = mpg) +
+  geom_point(mapping = aes(x = displ, y = hwy)) +
+  facet_grid(. ~ cyl)
+
+ggplot(data = mpg) +
+  geom_point(mapping = aes(x = displ, y = hwy)) +
+  facet_grid(~ cyl)
+```
+
+最后两个图表明 `facet_grid` 中写 `.` 和不写没区别。
+
+# Geometric Objects
+
+```{r}
+ggplot(data = mpg) +
+  geom_point(mapping = aes(displ, hwy))
+ggplot(data = mpg) +
+  geom_smooth(mapping = aes(displ, hwy))
+ggplot(data = mpg) +
+  geom_smooth(mapping = aes(x = displ, y = hwy, linetype = drv))
+```
+
+```{r}
+ggplot(data = mpg) +
+  geom_smooth(mapping = aes(x = displ, y = hwy))
+
+ggplot(data = mpg) +
+  geom_smooth(mapping = aes(x = displ, y = hwy, group = drv))
+
+ggplot(data = mpg) +
+  geom_smooth(
+    mapping = aes(x = displ, y = hwy, color = drv),
+    show.legend = FALSE
+  )
+ggplot(data = mpg) +
+  geom_smooth(mapping = aes(x = displ, y = hwy, color = drv))
+```
+
+```{r}
+ggplot(data = mpg) +
+  geom_point(mapping = aes(x = displ, y = hwy)) +
+  geom_smooth(mapping = aes(x = displ, y = hwy))
+
+ggplot(data = mpg, mapping = aes(x = displ, y = hwy)) +
+  geom_point(mapping = aes(color = class)) +
+  geom_smooth()
+
+ggplot(data = mpg, mapping = aes(x = displ, y = hwy)) +
+  geom_point(mapping = aes(color = class)) +
+  geom_smooth(data = filter(mpg, class == "subcompact"), se = FALSE)
+```
+
+# Statistical transformations {#statTrans}
+```{r}
+ggplot(data = diamonds) +
+  geom_bar(mapping = aes(x = cut))
+
+ggplot(data = diamonds) +
+  stat_count(mapping = aes(x = cut))
+```
+
+```{r}
+ggplot(data = diamonds) +
+  stat_summary(
+    mapping = aes(x = cut, y = depth),
+    fun.ymin = min,
+    fun.ymax = max,
+    fun.y = median
+  )
+
+ggplot(data = diamonds) +
+  stat_bin(mapping = aes(x = depth))
+```
+
+# Position adjustments
+
+## 柱图 {#barPosAdj}
+```{r}
+ggplot(data = diamonds) +
+  geom_bar(mapping = aes(x = cut, colour = cut))
+ggplot(data = diamonds) +
+  geom_bar(mapping = aes(x = cut, fill = cut))
+ggplot(data = diamonds) +
+  geom_bar(mapping = aes(x = cut, fill = clarity))
+ggplot(data = diamonds, mapping = aes(x = cut, fill = clarity)) +
+  geom_bar(alpha = 1/5, position = "identity")
+ggplot(data = diamonds, mapping = aes(x = cut, colour = clarity)) +
+  geom_bar(fill = NA, position = "identity")
+ggplot(data = diamonds) +
+  geom_bar(mapping = aes(x = cut, fill = clarity), position = "fill")
+ggplot(data = diamonds) +
+  geom_bar(mapping = aes(x = cut, fill = clarity), position = "dodge")
+```
+
+## 散点图 {#scatterPosAdj}
+```{r}
+ggplot(data = mpg) +
+  geom_point(mapping = aes(x = displ, y = hwy), position = "jitter")
+```
+
+Q1: 原图 overplotting 严重，用 `geom_jitter` 替换后效果不错：
+```{r}
+ggplot(data = mpg, mapping = aes(x = cty, y = hwy)) +
+  geom_point()
+ggplot(data = mpg, mapping = aes(x = cty, y = hwy)) +
+  geom_jitter()
+```
+
+Q2: `width` 和 `height`:
+```{r}
+ggplot(data = mpg, mapping = aes(x = cty, y = hwy)) +
+  geom_jitter(width = 0, height = 0.9)
+ggplot(data = mpg, mapping = aes(x = cty, y = hwy)) +
+  geom_jitter(width = 0.9, height = 0)
+ggplot(data = mpg, mapping = aes(x = cty, y = hwy)) +
+  geom_jitter(width = 1.3, height = 1.3)
+```
+
+可见 `width` 和 `height` 越大，随即偏移越大。
+
+Q3: 重叠越多，点半径越大：
+```{r}
+ggplot(data = mpg, mapping = aes(x = cty, y = hwy)) +
+  geom_count()
+```
+
+Q4: 文档没有说 `position` 参数的默认值，增加 `position = 'dodge'` 对结果没有影响：
+```{r}
+ggplot(data = mpg, mapping = aes(x = drv, y = hwy)) +
+  geom_boxplot()
+ggplot(data = mpg, mapping = aes(x = drv, y = hwy)) +
+  geom_boxplot(position = 'dodge')
+```
+
+# Coordinate Systems {#coordSys}
+
+```{r}
+ggplot(data = mpg, mapping = aes(x = class, y = hwy)) +
+  geom_boxplot()
+ggplot(data = mpg, mapping = aes(x = class, y = hwy)) +
+  geom_boxplot() +
+  coord_flip()
+```
+
+执行下面的代码需要首先预先安装 `maps` 和 `ggplot2` 包：
+```{r}
+library(maps)
+nz <- map_data("nz")
+
+ggplot(nz, aes(long, lat, group = group)) +
+  geom_polygon(fill = "white", colour = "black")
+
+ggplot(nz, aes(long, lat, group = group)) +
+  geom_polygon(fill = "white", colour = "black") +
+  coord_quickmap()
+```
+
+## Element Composition {#eleComp}
+```{r}
+bar <- ggplot(data = diamonds) +
+  geom_bar(
+    mapping = aes(x = cut, fill = cut),
+    show.legend = FALSE,
+    width = 1
+  ) +
+  theme(aspect.ratio = 1) +
+  labs(x = NULL, y = NULL)
+
+bar + coord_flip()
+bar + coord_polar()
+```
+
+# Layered Grammar of Graphics
+
+愿景：图形能不能像函数一样自由组合？
+
+图形语法七要素：
+
+* data: 数据源, dataframe
+
+* geom function: 图表类型，bar, scatter, line, boxplot, ...
+
+* mappings: 映射关系，包括：X, Y (from the dataframe)，以及一个或多个分组指标，例如颜色、形状、大小、线型等等，参见 [示例](#aesMap)；
+
+* stats: 统计变换，例如统计个数，百分比、自定义统计方法等，参见[示例](#statTrans)。每种统计变换有默认对应的图类型，例如 `count()` 变换对应柱图 ，反过来每种类型的图也默认对应一种统计变换。
+
+* position: 柱图的[分组方式](#barPosAdj)，散点图的[扰动和重叠处理](#scatterPosAdj)等；
+
+* coordinate function: 坐标系设置，例如坐标轴对调、长度缩放等，参见 [示例](#coordSys);
+
+* facet function: 按照某个特征分组绘图，又称为 subplot，参见 [示例](#facet).
+
+各个要素之间可以灵活组合，从而能够创建出各种复杂的图形：
+
+```
+ggplot(data = <DATA>) +
+  <GEOM_FUNCTION>(
+     mapping = aes(<MAPPINGS>),
+     stat = <STAT>,
+     position = <POSITION>
+  ) +
+  <COORDINATE_FUNCTION> +
+  <FACET_FUNCTION>
+```
+
+参见 [示例](#eleComp)。
+
+## 实例分析
+
+```{r}
+ggplot(data = diamonds) +
+  geom_bar(mapping = aes(x = cut, y = ..count.., fill = cut))
+```
+
+* data: `diamonds`
+
+* geom function: `geom_bar`，柱图
+
+* mappings: `x = cut, y = ..count.., fill = cut`，可以简写为 `x = cut, fill = cut`；
+
+* stats: `geom_bar` 对应的默认统计变换：`stat_count()`，计算个数；
+
+* position: 在柱图默认的坐标系中放置各个类别的图形；
+
+* coordinate function: 默认使用笛卡尔坐标系；
+
+* facet function: 默认分组只包含一张图。
