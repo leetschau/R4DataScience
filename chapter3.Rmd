@@ -1,0 +1,87 @@
+---
+title: "Data Transformation"
+output: html_notebook
+---
+
+> Visualisation is an important tool for insight generation, but it is rare that you get the data in exactly the right form you need.
+
+Install `nycflights13` with `install.packages`.
+
+```{r}
+library(nycflights13)
+library(tidyverse)
+flights
+```
+
+What is a *tibble*?
+How does it different from vanilla *data frame*?
+
+The data type of tibble:
+
+* int
+* dbl
+* chr
+* dttm
+* lgl
+* fctr
+* date
+
+Five key *dplyr* functions:
+
+* filter observations by value: `filter()`
+* reorder with `arrange()`
+* select feature(s): `select()`
+* Create new feature(s) with functions of existing feature(s): `mutate()`
+* Collapse many observations down to a single summary: `summarise()`
+
+> These can all be used in conjunction with group_by() which changes the scope of each function from operating on the entire dataset to operating on it group-by-group. These six functions provide the verbs for a language of data manipulation.
+
+上述5个函数与 `group_by()` 组合使用，使前者的作用域从整个 dataset 变为某个分组。
+
+6个函数的使用方法类似：
+
+1. The first argument is a data frame.
+
+1. The subsequent arguments describe what to do with the data frame, using the variable names (without quotes).
+
+1. The result is a new data frame.
+
+# 3.1 Filter
+
+```{r}
+jan1 <- filter(flights, month ==1, day ==1)
+```
+
+## 3.1.1 Comparisons
+
+`>`, `>=`, `<`, `<=`, `!=` (not equal) and `==`.
+
+Notice `==` is different from `=`, and not using `==` between floating numbers:
+```{r}
+# filter(flights, month = 1)
+sqrt(2) ^ 2 == 2
+1 / 49 * 49 == 1
+```
+
+# 3.2 Select
+
+```{r}
+flt_time <- select(flights, year:day)
+flt_time
+select(flt_time, day, everything())
+```
+
+# 3.6 Summarise
+
+```{r}
+by_dest <- group_by(flights, dest)
+delay <- summarise(by_dest,
+                   count = n(),
+                   dist = mean(distance, na.rm = TRUE),
+                   delay = mean(arr_delay, na.rm = TRUE))
+except_hnl <- filter(delay, count > 20, dest != 'HNL')
+ggplot(data = except_hnl, mapping = aes(x = dist, y = delay)) +
+  geom_point(aes(size = count), alpha = 1/3) +
+  geom_smooth(se = FALSE)
+```
+
