@@ -1,0 +1,228 @@
+---
+title: "Exploratory Data Analysis"
+output: html_notebook
+---
+
+```{r}
+library(tidyverse)
+```
+
+# Variation
+
+## Visualising distributions
+
+Use bar chart for categorial variable:
+```{r}
+ggplot(data = diamonds) +
+  geom_bar(mapping = aes(x = cut))
+
+diamonds %>% 
+  count(cut)
+```
+
+Use histogram for continuous variable:
+```{r}
+ggplot(data = diamonds) +
+  geom_histogram(mapping = aes(x = carat), binwidth = 0.5)
+```
+
+Binage a continuous variable and plot it:
+```{r}
+diamonds %>% 
+  count(cut_width(carat, 0.5))
+```
+
+Plot with bin-width = 0.1 instead of 0.5:
+```{r}
+smaller <- diamonds %>% 
+  filter(carat < 3)
+
+ggplot(data = smaller, mapping = aes(x = carat)) +
+  geom_histogram(binwidth = 0.1)
+```
+
+To overlay multiple histograms in the same plot, use `geom_freqpoly()` instead of `geom_histogram()`:
+```{r}
+ggplot(data = smaller, mapping = aes(x = carat, colour = cut)) +
+  geom_freqpoly(binwidth = 0.1)
+```
+
+
+## Typical values
+
+```{r}
+ggplot(data = smaller, mapping = aes(x = carat)) +
+  geom_histogram(binwidth = 0.01)
+```
+
+```{r}
+ggplot(data = faithful, mapping = aes(x = eruptions)) + 
+  geom_histogram(binwidth = 0.25)
+```
+
+## Unusual values
+
+通过限制 Y 轴范围看清楚异常值：
+```{r}
+ggplot(diamonds) + 
+  geom_histogram(mapping = aes(x = y), binwidth = 0.5) +
+  coord_cartesian(ylim = c(0, 50))
+```
+
+```{r}
+unusual <- diamonds %>% 
+  filter(y < 3 | y > 20) %>% 
+  select(price, x, y, z) %>%
+  arrange(price)
+unusual
+```
+
+`y` 值为 58.9 mm 的钻石价格 $12210，显然不合理。
+
+## Missing values
+
+```{r}
+diamonds2 <- diamonds %>% 
+  mutate(y = ifelse(y < 3 | y > 20, NA, y))
+ggplot(data = diamonds2, mapping = aes(x = x, y = y)) + 
+  geom_point()
+ggplot(data = diamonds2, mapping = aes(x = x, y = y)) + 
+  geom_point(na.rm = TRUE)
+```
+
+```{r}
+library(nycflights13)
+sample_n(flights, 6)
+flights %>% 
+  mutate(
+    cancelled = is.na(dep_time),
+    sched_hour = sched_dep_time %/% 100,
+    sched_min = sched_dep_time %% 100,
+    sched_dep_time = sched_hour + sched_min / 60
+  ) %>% 
+  ggplot(mapping = aes(sched_dep_time)) + 
+    geom_freqpoly(mapping = aes(colour = cancelled), binwidth = 1/4)
+```
+
+这里时间格式是 `HHMM`，例如 1930 表示 19:30，812表示 08:12，所以除以100的商和余数正是小时和分钟。
+
+这张图表明：对于未取消的航班，08:00 和 15:00 左右出发的数量最多，
+对于被取消的航班，数量都比较少，看不出明显的数量随出发时间变化的趋势。
+
+# Covariation
+
+## A categorical and continuous variable
+
+绘制不同切割方法的钻石在不同价格区间中的数量 (count):
+
+```{r}
+ggplot(data = diamonds, mapping = aes(x = price)) + 
+  geom_freqpoly(mapping = aes(colour = cut), binwidth = 500)
+```
+
+
+但是不同种类钻石的数量不同：
+```{r}
+ggplot(diamonds) + 
+  geom_bar(mapping = aes(x = cut))
+```
+
+导致直接比较数量没意义。
+
+不绘制绝对数量，改为比例，使得每条曲线的积分面积都是1：
+```{r}
+ggplot(data = diamonds, mapping = aes(x = price, y = ..density..)) + 
+  geom_freqpoly(mapping = aes(colour = cut), binwidth = 500)
+```
+
+可见cut质量越差，价格分布越平均，但总体趋势是越贵的越少，不论哪种 cut 方式。
+
+改为用 boxplot 展示：
+```{r}
+ggplot(data = diamonds, mapping = aes(x = cut, y = price)) +
+  geom_boxplot()
+```
+
+为什么切割质量最好的钻石平均价格反而最低？
+
+首先，图中的横线表示的是中位数，不是平均值，所以不能说 ideal 平均价格最低。
+其次，ideal 中位数比 fair 低，但是没考虑其他因素。例如重量等。
+
+类型变量无排序时效果：
+```{r}
+ggplot(data = mpg, mapping = aes(x = class, y = hwy)) +
+  geom_boxplot()
+```
+
+排序后效果（注意 `x = ` 后表达式的变化）：
+```{r}
+ggplot(data = mpg) +
+  geom_boxplot(mapping = aes(x = reorder(class, hwy, FUN = median), y = hwy))
+```
+
+旋转坐标轴后的效果：
+```{r}
+ggplot(data = mpg) +
+  geom_boxplot(mapping = aes(x = reorder(class, hwy, FUN = median), y = hwy)) +
+  coord_flip()
+```
+
+## Two categorical variables
+
+`geom_count` 用点大小表示某一特定组合下观测数的多少：
+```{r}
+ggplot(data = diamonds) +
+  geom_count(mapping = aes(x = cut, y = color))
+```
+
+或者使用 `count` 函数给出列表结果：
+```{r}
+diamonds %>% 
+  count(color, cut)
+```
+
+然后用 `geom_tile` 展示出来：
+```{r}
+diamonds %>% 
+  count(color, cut) %>%  
+  ggplot(mapping = aes(x = color, y = cut)) +
+    geom_tile(mapping = aes(fill = n))
+```
+
+## Two continuous variables
+
+使用原始散点图展示两个连续变量间关系：
+```{r}
+ggplot(data = diamonds) +
+  geom_point(mapping = aes(x = carat, y = price))
+```
+
+由于点遮挡的问题，效果不好，且绘制大数据集会很慢。
+一个解决方法是添加透明度：
+```{r}
+ggplot(data = diamonds) + 
+  geom_point(mapping = aes(x = carat, y = price), alpha = 1 / 100)
+```
+
+但绘制大数据集仍然效率低，借鉴 bin 方法绘制（六角形绘图需要安装 `hexbin` 包）：
+```{r}
+ggplot(data = smaller) +
+  geom_bin2d(mapping = aes(x = carat, y = price))
+ggplot(data = smaller) +
+  geom_hex(mapping = aes(x = carat, y = price))
+```
+
+最后一种方法是只对一个 feature 做bin，然后使用 category vs continous 方法绘制：
+```{r}
+ggplot(data = smaller, mapping = aes(x = carat, y = price)) + 
+  geom_boxplot(mapping = aes(group = cut_width(carat, 0.1)))
+```
+
+这样做的一个缺点是无法体现每个 bin 中观测的数量差异，
+使用 `cut_number()` 解决这个问题（box 的宽度和观测数成正比）：
+```{r}
+ggplot(data = smaller, mapping = aes(x = carat, y = price)) + 
+  geom_boxplot(mapping = aes(group = cut_number(carat, 20)))
+```
+
+# Patterns and models
