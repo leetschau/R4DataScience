@@ -16,7 +16,7 @@ Use bar chart for categorial variable:
 ggplot(data = diamonds) +
   geom_bar(mapping = aes(x = cut))
 
-diamonds %>% 
+diamonds %>%
   count(cut)
 ```
 
@@ -28,13 +28,13 @@ ggplot(data = diamonds) +
 
 Binage a continuous variable and plot it:
 ```{r}
-diamonds %>% 
+diamonds %>%
   count(cut_width(carat, 0.5))
 ```
 
 Plot with bin-width = 0.1 instead of 0.5:
 ```{r}
-smaller <- diamonds %>% 
+smaller <- diamonds %>%
   filter(carat < 3)
 
 ggplot(data = smaller, mapping = aes(x = carat)) +
@@ -56,7 +56,7 @@ ggplot(data = smaller, mapping = aes(x = carat)) +
 ```
 
 ```{r}
-ggplot(data = faithful, mapping = aes(x = eruptions)) + 
+ggplot(data = faithful, mapping = aes(x = eruptions)) +
   geom_histogram(binwidth = 0.25)
 ```
 
@@ -64,14 +64,14 @@ ggplot(data = faithful, mapping = aes(x = eruptions)) +
 
 通过限制 Y 轴范围看清楚异常值：
 ```{r}
-ggplot(diamonds) + 
+ggplot(diamonds) +
   geom_histogram(mapping = aes(x = y), binwidth = 0.5) +
   coord_cartesian(ylim = c(0, 50))
 ```
 
 ```{r}
-unusual <- diamonds %>% 
-  filter(y < 3 | y > 20) %>% 
+unusual <- diamonds %>%
+  filter(y < 3 | y > 20) %>%
   select(price, x, y, z) %>%
   arrange(price)
 unusual
@@ -82,25 +82,25 @@ unusual
 ## Missing values
 
 ```{r}
-diamonds2 <- diamonds %>% 
+diamonds2 <- diamonds %>%
   mutate(y = ifelse(y < 3 | y > 20, NA, y))
-ggplot(data = diamonds2, mapping = aes(x = x, y = y)) + 
+ggplot(data = diamonds2, mapping = aes(x = x, y = y)) +
   geom_point()
-ggplot(data = diamonds2, mapping = aes(x = x, y = y)) + 
+ggplot(data = diamonds2, mapping = aes(x = x, y = y)) +
   geom_point(na.rm = TRUE)
 ```
 
 ```{r}
 library(nycflights13)
 sample_n(flights, 6)
-flights %>% 
+flights %>%
   mutate(
     cancelled = is.na(dep_time),
     sched_hour = sched_dep_time %/% 100,
     sched_min = sched_dep_time %% 100,
     sched_dep_time = sched_hour + sched_min / 60
-  ) %>% 
-  ggplot(mapping = aes(sched_dep_time)) + 
+  ) %>%
+  ggplot(mapping = aes(sched_dep_time)) +
     geom_freqpoly(mapping = aes(colour = cancelled), binwidth = 1/4)
 ```
 
@@ -116,14 +116,14 @@ flights %>%
 绘制不同切割方法的钻石在不同价格区间中的数量 (count):
 
 ```{r}
-ggplot(data = diamonds, mapping = aes(x = price)) + 
+ggplot(data = diamonds, mapping = aes(x = price)) +
   geom_freqpoly(mapping = aes(colour = cut), binwidth = 500)
 ```
 
 
 但是不同种类钻石的数量不同：
 ```{r}
-ggplot(diamonds) + 
+ggplot(diamonds) +
   geom_bar(mapping = aes(x = cut))
 ```
 
@@ -131,7 +131,7 @@ ggplot(diamonds) +
 
 不绘制绝对数量，改为比例，使得每条曲线的积分面积都是1：
 ```{r}
-ggplot(data = diamonds, mapping = aes(x = price, y = ..density..)) + 
+ggplot(data = diamonds, mapping = aes(x = price, y = ..density..)) +
   geom_freqpoly(mapping = aes(colour = cut), binwidth = 500)
 ```
 
@@ -177,14 +177,14 @@ ggplot(data = diamonds) +
 
 或者使用 `count` 函数给出列表结果：
 ```{r}
-diamonds %>% 
+diamonds %>%
   count(color, cut)
 ```
 
 然后用 `geom_tile` 展示出来：
 ```{r}
-diamonds %>% 
-  count(color, cut) %>%  
+diamonds %>%
+  count(color, cut) %>%
   ggplot(mapping = aes(x = color, y = cut)) +
     geom_tile(mapping = aes(fill = n))
 ```
@@ -200,7 +200,7 @@ ggplot(data = diamonds) +
 由于点遮挡的问题，效果不好，且绘制大数据集会很慢。
 一个解决方法是添加透明度：
 ```{r}
-ggplot(data = diamonds) + 
+ggplot(data = diamonds) +
   geom_point(mapping = aes(x = carat, y = price), alpha = 1 / 100)
 ```
 
@@ -214,15 +214,75 @@ ggplot(data = smaller) +
 
 最后一种方法是只对一个 feature 做bin，然后使用 category vs continous 方法绘制：
 ```{r}
-ggplot(data = smaller, mapping = aes(x = carat, y = price)) + 
+ggplot(data = smaller, mapping = aes(x = carat, y = price)) +
   geom_boxplot(mapping = aes(group = cut_width(carat, 0.1)))
 ```
 
 这样做的一个缺点是无法体现每个 bin 中观测的数量差异，
 使用 `cut_number()` 解决这个问题（box 的宽度和观测数成正比）：
 ```{r}
-ggplot(data = smaller, mapping = aes(x = carat, y = price)) + 
+ggplot(data = smaller, mapping = aes(x = carat, y = price)) +
   geom_boxplot(mapping = aes(group = cut_number(carat, 20)))
 ```
 
 # Patterns and models
+
+间歇泉的等待时间和喷发持续时间之间的关系：
+```{r}
+ggplot(data = faithful) +
+  geom_point(mapping = aes(x = eruptions, y = waiting))
+```
+
+```{r}
+library(modelr)
+mod <- lm(log(price) ~ log(carat), data = diamonds)
+diamonds2 <- diamonds %>%
+  add_residuals(mod) %>%
+  mutate(resid = exp(resid))
+ggplot(data = diamonds2) +
+  geom_point(mapping = aes(x = carat, y = resid))
+```
+
+第一步用 `log()` 取两个特征的对数，所以第二步中用 `exp()` 转换为实际残差。
+
+残差中不再包含 price 中由于 carat 不同导致的变化，再看它与 cut 的关系：
+```{r}
+ggplot(data = diamonds2) +
+  geom_boxplot(mapping = aes(x = cut, y = resid))
+```
+
+表明排除重量影响后，切割质量越好，价格越高。
+
+### `add_residuals()` function
+
+```{r}
+df <- tibble::data_frame(
+  x = sort(runif(100)),
+  y = 5 * x + 0.5 * x ^ 2 + 3 + rnorm(length(x))
+)
+plot(df)
+
+m1 <- lm(y ~ x, data = df)
+df %>% add_residuals(m1)
+
+m2 <- lm(y ~ poly(x, 2), data = df)
+df %>% spread_residuals(m1, m2)
+df %>% gather_residuals(m1, m2)
+```
+
+`add_residuals(df, model)` 在 `df` 上添加一个残差列，值是使用模型 `moddel` 在 `df` 上预测产生的残差。
+`spread_residuals(df, model1, model2, ..., modeln)` 在 `df` 上添加 $n$ 列，每列是一个模型的残差。
+`gather_residuals(df, model1, model2, ..., modeln)` 在 `df` 上添加2列，一列是模型名称列，如 `model1`, `model2` 等，
+第二列是此模型对应的残差。
+
+# ggplot2 calls
+
+注意从 `%>%` 到 `+` 的变化：
+```{r}
+diamonds %>%
+  count(cut, clarity) %>%
+  ggplot(aes(clarity, cut, fill = n)) +
+    geom_tile()
+```
+
+二者本质是一样的，只是开发 ggplot 的时候还没有管道符。
