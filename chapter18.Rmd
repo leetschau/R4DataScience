@@ -1,0 +1,419 @@
+---
+title: "Model Basics"
+output: html_notebook
+---
+
+什么是模型？
+
+**数据集** 是一个 **复杂系统** 某些特征的量化体现，
+**模型** 是对一个数据集的低维概括性表示。
+
+建模过程包含哪些步骤？
+
+1. 提取数据，形成数据集；
+
+1. 根据业务领域知识，选择一个（或多个）模型族，
+   模型族可以是参数化的（例如线性回归），也可以是非参数化的（例如树方法）；
+
+1. 用模型族中的每个模型拟合数据集，找到拟合效果最好的那个模型，作为系统建模的最终结果。
+
+这个过程决定了模型具有以下特点：
+
+* 模型没有对与错之分，只有质量高低之分；
+
+* 模型族的选择往往比模型拟合过程对模型质量的影响更大。
+
+# 基础建模过程
+
+## 建模过程示例
+
+下面以一个 `tidyverse` 内置数据集 `sim1` 为例说明建模的基本过程。
+
+```{r}
+library(tidyverse)
+library(modelr)
+options(na.action = na.warn)
+
+sim1
+
+ggplot(sim1, aes(x, y)) +
+  geom_point()
+```
+
+从分布形式上看用一阶线性模型比较好，也就是形如 $y = a_0 + a_1 x$ 的模型，
+于是使用均匀分布生成函数 `runif` 随机生成250个一阶线性模型：
+```{r}
+models <- tibble(
+  a1 = runif(250, -20, 40),
+  a2 = runif(250, -5, 5)
+)
+
+ggplot(sim1, aes(x, y)) +
+  geom_abline(aes(intercept = a1, slope = a2), data = models, alpha = 1/4) +
+  geom_point()
+```
+
+其中大多数效果很差（很正常），但其中也有看上去比较靠谱的。
+
+创建模型生成器 `model1`，并使用它创建一个 $a_0 = 7, \; a_1 = 1.5$ 的模型：
+```{r}
+model1 <- function(a, data) {
+  a[1] + data$x * a[2]
+}
+model1(c(7, 1.5), sim1)
+```
+
+计算此模型的 *root-mean-squared deviation* (RMSD):
+```{r}
+measure_distance <- function(mod, data) {
+  diff <- data$y - model1(mod, data)
+  sqrt(mean(diff ^ 2))
+}
+measure_distance(c(7, 1.5), sim1)
+```
+
+计算所有 250 个模型的 RMSD:
+```{r}
+sim1_dist <- function(x1, x2) {
+  measure_distance(c(x1, x2), sim1)
+}
+
+models <- models %>% 
+  mutate(dist = purrr::map2_dbl(a1, a2, sim1_dist))
+models
+```
+
+这里 `purrr::map2_dbl()` 是 `map2()` 函数族的一员，表示并行版本的 `map()` 函数，
+这里的意思是：将`sim1_dist(x1, x2)` 映射到 `models` 的 `dist` 列上，
+其中第1个参数 `x1` 来自 `models` 的 `a1` 列，第2个参数 `x2` 来自 `a2` 列。
+
+为了便于区别，修改了原代码里 `sim1_dist` 的名义参数列表。
+
+画出 RMSD 最小的前10个模型，RMSD 值越小拟合效果越好，
+对应的线颜色越浅 （用 `dist` 的相反数表征，相反数越小颜色越深）：
+```{r}
+ggplot(sim1, aes(x, y)) + 
+  geom_point(size = 2, colour = "grey30") + 
+  geom_abline(
+    aes(intercept = a1, slope = a2, colour = -dist), 
+    data = filter(models, rank(dist) <= 10)
+  )
+```
+
+
+用散点图表示最优10个模型和所有模型：
+```{r}
+ggplot(models, aes(a1, a2)) +
+  geom_point(data = filter(models, rank(dist) <= 10), size = 4, colour = "red") +
+  geom_point(aes(colour = -dist))
+```
+
+使用均匀分布的二维阵列代替上面的随机数，重新绘制模型质量散点图：
+```{r}
+grid <- expand.grid(
+  a1 = seq(-5, 20, length = 25),
+  a2 = seq(1, 3, length = 25)
+  ) %>%
+  mutate(dist = purrr::map2_dbl(a1, a2, sim1_dist))
+
+grid %>%
+  ggplot(aes(a1, a2)) +
+  geom_point(data = filter(grid, rank(dist) <= 10), size = 4, colour = "red") +
+  geom_point(aes(colour = -dist))
+```
+
+二维阵列保存在 `grid` 中，模型质量保存在 `grid$dist` 中。
+
+用筛选出来的最好的10个模型绘制拟合图：
+```{r}
+ggplot(sim1, aes(x, y)) + 
+  geom_point(size = 2, colour = "grey30") + 
+  geom_abline(
+    aes(intercept = a1, slope = a2, colour = -dist), 
+    data = filter(grid, rank(dist) <= 10)
+  )
+```
+
+使用 Newton-Raphson 搜索（由 `optim` 函数实现）寻找 `measure_distance` 函数在 `sim1` 数据集上的最小值：
+```{r}
+best <- optim(c(0, 0), measure_distance, data = sim1)
+best$par
+#> [1] 4.22 2.05
+
+ggplot(sim1, aes(x, y)) + 
+  geom_point(size = 2, colour = "grey30") + 
+  geom_abline(intercept = best$par[1], slope = best$par[2])
+```
+
+这样就完成了系统建模的最后一步：用模型拟合数据，找到最好的那一个。
+但这里使用 Newton-Raphson 方法 **可能** 找到的是局部最优解，
+为了确保找到全局最优解，使用 R 提供的 `lm()` 函数：
+```{r}
+sim1_mod <- lm(y ~ x, data = sim1)
+coef(sim1_mod)
+```
+
+全局最优解与使用 `optim()` 得到的最优解一致。
+
+## 模型可视化
+
+使用预测值-残差方法分析模型，首先用 `data_grid` 函数得到数据集的所有值（无重复）：
+```{r}
+grid <- sim1 %>% 
+  data_grid(x) 
+grid
+```
+
+用 `add_predictions()` 函数计算模型的预测值：
+```{r}
+grid <- grid %>% 
+  add_predictions(sim1_mod) 
+grid
+```
+
+用 `grid$pred` 绘制拟合曲线：
+```{r}
+ggplot(sim1, aes(x)) +
+  geom_point(aes(y = y)) +
+  geom_line(aes(y = pred), data = grid, colour = "red", size = 1)
+```
+
+与上面使用 `geom_abline()` 绘制拟合曲线相比，这里的计算方法更通用，适用于所有模型。
+
+我们知道模型是对数据的简化概括，所以它反映了数据集的某些特征，忽略了另一些特征，
+这些被忽略的特征，就体现在残差里。
+
+使用 `add_residuals()` 
+```{r}
+sim1 <- sim1 %>% 
+  add_residuals(sim1_mod)
+sim1
+```
+
+绘制残差的折线图：
+```{r}
+ggplot(sim1, aes(resid)) + 
+  geom_freqpoly(binwidth = 0.5)
+sum(sim1$resid)
+```
+
+可以看到残差在 $X$ 轴两侧出现频率覆盖的面积基本一致，表明残差的和为0，
+使用 `sum()` 函数求残差和验证了上面的假设。
+
+绘制残差分布图：
+```{r}
+ggplot(sim1, aes(x, resid)) + 
+  geom_ref_line(h = 0) +
+  geom_point()
+```
+
+## 公式与模型族
+```{r}
+df <- tribble(
+  ~y, ~x1, ~x2,
+  4, 2, 5,
+  5, 1, 6
+)
+model_matrix(df, y ~ x1)
+```
+
+### 自变量为类型值
+
+自制数据集的 *model_matrix*:
+```{r}
+df <- tribble(
+  ~ sex, ~ response,
+  "male", 1,
+  "female", 2,
+  "male", 1
+)
+model_matrix(df, response ~ sex)
+```
+
+参考 [Design matrix](https://en.wikipedia.org/wiki/Design_matrix).
+
+*sim2* 数据集及其线性拟合：
+```{r}
+sim2
+ggplot(sim2) + 
+  geom_point(aes(x, y))
+mod2 <- lm(y ~ x, data = sim2)
+
+grid <- sim2 %>% 
+  data_grid(x) %>% 
+  add_predictions(mod2)
+grid
+```
+
+拟合值是每个类别所有 $Y$ 值的平均值（最小化了 root-mean-squared distance）：
+```{r}
+ggplot(sim2, aes(x)) + 
+  geom_point(aes(y = y)) +
+  geom_point(data = grid, aes(y = pred), colour = "red", size = 4)
+```
+
+### 连续与类别型变量的交互
+
+```{r}
+sim3
+ggplot(sim3, aes(x1, y)) + 
+  geom_point(aes(colour = x2))
+```
+
+两个模型族：
+```{r}
+mod1 <- lm(y ~ x1 + x2, data = sim3)
+mod2 <- lm(y ~ x1 * x2, data = sim3)
+```
+
+为两个特征添加预测值：
+```{r}
+grid <- sim3 %>% 
+  data_grid(x1, x2) %>% 
+  gather_predictions(mod1, mod2)
+grid
+```
+
+线性拟合模型：
+```{r}
+ggplot(sim3, aes(x1, y, colour = x2)) + 
+  geom_point() + 
+  geom_line(data = grid, aes(y = pred)) + 
+  facet_wrap(~ model)
+```
+
+对比两个模型的残差：
+```{r}
+sim3 <- sim3 %>% 
+  gather_residuals(mod1, mod2)
+
+ggplot(sim3, aes(x1, resid, colour = x2)) + 
+  geom_point() + 
+  facet_grid(model ~ x2)
+```
+
+很明显 *mod1* 的 *b*, *c*, *d* 项的残差包含了某种模式，说明模型没有包含数据中的所有信息。
+所以 *mod2* 比 *mod1* 更好。
+
+### 两个连续型变量的交互
+
+基于 sim4 生成两个模型，以及各自的预测值：
+```{r}
+mod1 <- lm(y ~ x1 + x2, data = sim4)
+mod2 <- lm(y ~ x1 * x2, data = sim4)
+
+grid <- sim4 %>% 
+  data_grid(
+    x1 = seq_range(x1, 5), 
+    x2 = seq_range(x2, 5) 
+  ) %>% 
+  gather_predictions(mod1, mod2)
+grid
+```
+
+绘制拟合图：
+```{r}
+ggplot(grid, aes(x1, x2)) + 
+  geom_tile(aes(fill = pred)) + 
+  facet_wrap(~ model)
+```
+
+似乎差别不大，改为绘制等高线，`x2` 处于不同区间时 `x1` 的预测值趋势，
+以及 `x1` 处于不同区间时 `x2` 的预测值趋势：
+```{r}
+ggplot(grid, aes(x1, pred, colour = x2, group = x2)) + 
+  geom_line() +
+  facet_wrap(~ model)
+ggplot(grid, aes(x2, pred, colour = x1, group = x1)) + 
+  geom_line() +
+  facet_wrap(~ model)
+```
+
+### 变换
+
+通过在线性模型上施加变换 (transformation)，可以方便地将上面的建模技术扩展到非线性领域。
+
+我们知道通过泰勒级数展开可以用多项式拟合任何连续函数，而多项式又是线性模型的一种，
+下面是一个自然样条拟合的例子：
+```{r}
+df <- tribble(
+  ~y, ~x,
+   1,  1,
+   2,  2, 
+   3,  3
+)
+library(splines)
+model_matrix(df, y ~ ns(x, 2))
+```
+
+最后通过一个自然样条函数拟合三角函数的例子说明非线性建模技术，首先准备好原始数据：
+```{r}
+sim5 <- tibble(
+  x = seq(0, 3.5 * pi, length = 50),
+  y = 4 * sin(x) + rnorm(length(x))
+)
+
+ggplot(sim5, aes(x, y)) +
+  geom_point()
+```
+
+用不同次数的模型拟合：
+```{r}
+mod1 <- lm(y ~ ns(x, 1), data = sim5)
+mod2 <- lm(y ~ ns(x, 2), data = sim5)
+mod3 <- lm(y ~ ns(x, 3), data = sim5)
+mod4 <- lm(y ~ ns(x, 4), data = sim5)
+mod5 <- lm(y ~ ns(x, 5), data = sim5)
+
+grid <- sim5 %>% 
+  data_grid(x = seq_range(x, n = 50, expand = 0.1)) %>% 
+  gather_predictions(mod1, mod2, mod3, mod4, mod5, .pred = "y")
+
+ggplot(sim5, aes(x, y)) + 
+  geom_point() +
+  geom_line(data = grid, colour = "red") +
+  facet_wrap(~ model)
+```
+
+## 处理缺失值
+
+空值不能传递任何变量间有价值的信息，所以 R 默认剔除数据中的空值。
+如果需要遇到空值后提出警告，而不是直接删除，可以通过设置 `options(na.action = na.warn)` 实现，
+本文第一节中设置了这一特征，效果如下所示：
+```{r}
+df <- tribble(
+  ~x, ~y,
+  1, 2.2,
+  2, NA,
+  3, 3.5,
+  4, 8.3,
+  NA, 10
+)
+
+mod <- lm(y ~ x, data = df)
+```
+
+如果需要在某次建模时关闭警告，可以通过 `na.action = na.exclude` 实现：
+```{r}
+mod <- lm(y ~ x, data = df, na.action = na.exclude)
+```
+
+然后用 `nobs()` 函数查看这个模型使用了多少有效的观测：
+```{r}
+nobs(mod)
+```
+
+## 其他模型族
+
+以上以线性模型为例说明了建模过程，线性模型虽然应用十分广泛，但也不是唯一的选择，
+下面列出了数据建模中常用的其他几种模型族以及 R 中常用的实现方法：
+
+* Generalised linear models: `stats::glm()`
+
+* Generalised additive models: `mgcv::gam()`
+
+* Penalised linear models: `glmnet::glmnet()`
+
+* Robust linear models: `MASS:rlm()`
+
+* Trees: `rpart::rpart()`
