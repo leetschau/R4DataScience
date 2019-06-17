@@ -1,0 +1,174 @@
+---
+title: "Model building"
+output: html_notebook
+---
+
+面对包含许多陌生信息的数据集，如何渐进地构造出满足业务要求的数据模型？
+
+1. 观察现有数据，提出假设；
+
+1. 根据已有假设，通过可视化方法构建初始模型；
+
+1. 从原始数据集中去掉模型可以解释的部分，得到残差；
+
+1. 将残差作为模型，重复前面两个步骤，直到最终残差符合终止条件。
+
+下面通过两个实例说明上述方法在实际数据集上的应用过程。
+
+```{r}
+library(tidyverse)
+library(modelr)
+options(na.action = na.warn)
+library(nycflights13)
+library(lubridate)
+```
+
+# 低品质钻石反而贵？
+
+```{r}
+ggplot(diamonds, aes(cut, price)) + geom_boxplot()
+ggplot(diamonds, aes(color, price)) + geom_boxplot()
+ggplot(diamonds, aes(clarity, price)) + geom_boxplot()
+```
+
+三张图提供了类似的信息：
+
+切割工艺 (*Fair*)、颜色 (*J*) 和纯度 (*I1*) 最差的钻石反而价格最高。
+
+## 价格与重量的关系
+
+为了找到这里“反常”价格的原因，先对数据集随机抽取50个样本：
+```{r}
+diamonds %>% 
+  sample_n(50) %>% 
+  select(price, carat, cut, color, clarity)
+```
+
+通过观察我们发现，价格受到重量 (carat) 的影响比较大，而且似乎比其他因素的影响还要大，
+所以当撇开重量谈价格，是没有任何意义的。
+
+现在问题变成了，如果通过建模过程，将上面的假设转换为具体的模型，最终证实或者证否基于感觉得到的结论？
+例如：如何量化各因素对价格的影响？
+
+第1步：看一下重量和价格的关系：
+```{r}
+ggplot(diamonds, aes(carat, price)) + 
+  geom_hex(bins = 50)
+```
+
+二者之间似乎存在非线性关系，为了更好的揭示它们之间的关系，
+不妨先去掉特别重的钻石，这类钻石只占总体的0.3%，且容易扭曲整体关系，
+然后求二者的对数，看看效果如何：
+```{r}
+diamonds2 <- diamonds %>%
+  filter(carat <= 2.5) %>%
+  mutate(lprice = log2(price), lcarat = log2(carat))
+head(diamonds2)
+ggplot(diamonds2, aes(lcarat, lprice)) +
+  geom_hex(bins = 50)
+```
+
+现在可以确定，重量确实与价格之间存在直接联系。
+
+第2步：用线性模型体现二者之间的现有关系：
+```{r}
+mod_diamond <- lm(lprice ~ lcarat, data = diamonds2)
+summary(mod_diamond)
+```
+
+把这个模型绘制出来，并叠加到原始数据上：
+```{r}
+head(diamonds2)
+
+grid <- diamonds2 %>%
+  data_grid(carat = seq_range(carat, 20)) %>%
+  mutate(lcarat = log2(carat)) %>%
+  add_predictions(mod_diamond, "lprice") %>%
+  mutate(price = 2 ^ lprice)
+
+head(grid, 10)
+
+ggplot(diamonds2, aes(carat, price)) +
+  geom_hex(bins = 50) +
+  geom_line(data = grid, colour = "red", size = 1)
+```
+
+这里首先通过 `seq_range(carat, 20)` 将重量（*carat* 列）转换为一个长度为20的等间距向量，
+它的最大、最小值等于原始 *carat* 向量的最大、最小值。
+再通过 `data_grid` 函数生成一个长度为20的 tibble：
+```{r}
+diamonds2 %>%
+  data_grid(carat = seq_range(carat, 20))
+```
+
+然后基于这个 *carat* 生成新的 *lcarat* （重量的对数）：
+```{r}
+diamonds2 %>%
+  data_grid(carat = seq_range(carat, 20)) %>%
+  mutate(lcarat = log2(carat))
+```
+
+结合上面的线性模型 *mod_diamond*，将现有 *lcarat* 列对应的 *lprice* 添加进来：
+```{r}
+diamonds2 %>%
+  data_grid(carat = seq_range(carat, 20)) %>%
+  mutate(lcarat = log2(carat)) %>%
+  add_predictions(mod_diamond, "lprice")
+```
+
+最后基于预测值 *lprice* 生成真实的预测价格 *price*。
+
+也可以不用 `data_grid` 简化重量，在原数据集上生成价格预测值：
+```{r}
+grid2 <- diamonds2 %>% 
+  add_predictions(mod_diamond, "lprice") %>%
+  mutate(price = 2 ^ lprice)
+
+ggplot(diamonds2, aes(carat, price)) +
+  geom_hex(bins = 50) +
+  geom_line(data = grid2, colour = "red", size = 1)
+```
+
+效果与简化版本完全一致，只是计算量比前者大了很多。
+
+第3步：从现有数据中去除模型可以解释的部分：
+```{r}
+diamonds2 <- diamonds2 %>% 
+  add_residuals(mod_diamond, "lresid")
+
+ggplot(diamonds2, aes(lcarat, lresid)) + 
+  geom_hex(bins = 50)
+```
+
+
+第4步：将残差作为新的模型进行分析：
+```{r}
+ggplot(diamonds2, aes(cut, lresid)) + geom_boxplot()
+ggplot(diamonds2, aes(color, lresid)) + geom_boxplot()
+ggplot(diamonds2, aes(clarity, lresid)) + geom_boxplot()
+```
+
+可以看到，去掉重量影响后，切割工艺、颜色和纯度与价格的关系正常了。
+
+从上面的图形可以进一步量化各个因素对价格的影响，
+这里 `lresid` 的含义是：重量以外的因素对价格造成影响的以2为底的对数，例如：
+纯度为 *VS2* 钻石的 `lresid` 中位数接近于0，表明可以用 *VS2* 作为纯度评价标准，
+也就是只考虑重量不考虑其他因素时，钻石的平均价格就是 *VS2* 钻石价格。
+
+纯度为 *I1* 的钻石的 `lresid` 中位数接近于 -1，表明由于纯度不佳，相同重量下，
+*I1* 钻石的价格只有 *VS2* 基准钻石价格的二分之一（$2^{-1}$）。
+如果某钻石的 `lresid` 值为1，则说明高纯度使得其价格是相同重量 *VS2* 钻石的2倍（$2^1$）。
+
+## 构建更复杂的模型
+
+# 纽约机场日航班數受哪些因素影响？
+
+## 星期变化规律
+
+## 不同季节周末航班规律
+
+## 计算出的变量
+
+## 年变化规律
+
+# 从模型中得到更多的信息
