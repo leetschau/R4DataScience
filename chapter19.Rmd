@@ -4,6 +4,7 @@ output: html_notebook
 ---
 
 面对包含许多陌生信息的数据集，如何渐进地构造出满足业务要求的数据模型？
+按照下面的流程，不断循环迭代，得到一个足够好的模型：
 
 1. 观察现有数据，提出假设；
 
@@ -39,8 +40,8 @@ ggplot(diamonds, aes(clarity, price)) + geom_boxplot()
 
 为了找到这里“反常”价格的原因，先对数据集随机抽取50个样本：
 ```{r}
-diamonds %>% 
-  sample_n(50) %>% 
+diamonds %>%
+  sample_n(50) %>%
   select(price, carat, cut, color, clarity)
 ```
 
@@ -52,7 +53,7 @@ diamonds %>%
 
 第1步：看一下重量和价格的关系：
 ```{r}
-ggplot(diamonds, aes(carat, price)) + 
+ggplot(diamonds, aes(carat, price)) +
   geom_hex(bins = 50)
 ```
 
@@ -120,7 +121,7 @@ diamonds2 %>%
 
 也可以不用 `data_grid` 简化重量，在原数据集上生成价格预测值：
 ```{r}
-grid2 <- diamonds2 %>% 
+grid2 <- diamonds2 %>%
   add_predictions(mod_diamond, "lprice") %>%
   mutate(price = 2 ^ lprice)
 
@@ -133,10 +134,10 @@ ggplot(diamonds2, aes(carat, price)) +
 
 第3步：从现有数据中去除模型可以解释的部分：
 ```{r}
-diamonds2 <- diamonds2 %>% 
+diamonds2 <- diamonds2 %>%
   add_residuals(mod_diamond, "lresid")
 
-ggplot(diamonds2, aes(lcarat, lresid)) + 
+ggplot(diamonds2, aes(lcarat, lresid)) +
   geom_hex(bins = 50)
 ```
 
@@ -161,14 +162,250 @@ ggplot(diamonds2, aes(clarity, lresid)) + geom_boxplot()
 
 ## 构建更复杂的模型
 
+现在把颜色、切割工艺和纯度也纳入模型：
+```{r}
+mod_diamond2 <- lm(lprice ~ lcarat + color + cut + clarity, data = diamonds2)
+```
+
+加上原来的重量，现在共包含4个特征，为了通过图形展示这个模型：
+```{r}
+grid <- diamonds2 %>%
+  data_grid(cut, .model = mod_diamond2) %>%
+  add_predictions(mod_diamond2)
+grid
+```
+
+这里 `.model` 的意思是如果模型 `mod_diamond2` 需要没有明确提供的特征，`data_grid` 自动填充一个 *标准值*，
+对于数值型特征，取中位数，对于类别型特征，取最大成分（出现最多的那个类别）。
+
+图示切割工艺和价格（对数化处理后）之间的关系：
+```{r}
+ggplot(grid, aes(cut, pred)) +
+  geom_point()
+```
+
+去除所有4个特征的影响后，残差是这样的：
+```{r}
+diamonds2 <- diamonds2 %>%
+  add_residuals(mod_diamond2, "lresid2")
+
+ggplot(diamonds2, aes(lcarat, lresid2)) +
+  geom_hex(bins = 50)
+```
+
+主体接近白噪声，说明模型的解释程度令人满意，但少部分数据的 `lcarat2` 值超过了2，
+意味着这些钻石的价格偏差是模型解释正常值的4倍（$2^2$）。
+对于这种情况，常用的方法是把它们筛选出来看一看：
+```{r}
+diamonds2 %>%
+  filter(abs(lresid2) > 1) %>%
+  add_predictions(mod_diamond2) %>%
+  mutate(pred = round(2 ^ pred)) %>%
+  select(price, pred, carat:table, x:z) %>%
+  arrange(price)
+```
+
+包括如下步骤：
+
+1. 选出价格偏差超过 $[\frac12, 2]$ 倍正常值的钻石；
+
+1. 添加模型预测价格列；
+
+1. 将对数价格转换为原始价格并取整；
+
+1. 只保留价格、预测价格、重量、切割工艺、颜色、纯度等特征；
+
+1. 按实际价格排序；
+
+这些价格异常的钻石，既有被高估也有被低估的，如果我们的模型没有问题，就要检查数据是不是有问题，
+如果数据也没有错误，赶紧买进那些物美价廉的钻石吧。
+
 # 纽约机场日航班數受哪些因素影响？
 
-## 星期变化规律
+这个数据集记录了 2013 年纽约机场每次航班信息，
+观察每天航班数量变化规律：
+```{r}
+flights
+daily <- flights %>%
+  mutate(date = make_date(year, month, day)) %>%
+  group_by(date) %>%
+  summarise(n = n())
+daily
+ggplot(daily, aes(date, n)) +
+  geom_line()
+```
 
-## 不同季节周末航班规律
+## 星期变化的影响
 
-## 计算出的变量
+由于商务人士是航班顾客的主体，周末的航班数应该比较少，
+为了证实这一点，将某天按在一星期中的位置（day of week）分类：
+```{r}
+daily <- daily %>%
+  mutate(wday = wday(date, label = TRUE))
+ggplot(daily, aes(wday, n)) +
+  geom_boxplot()
+```
 
-## 年变化规律
+将线性预测结果叠加到原始数据上：
+```{r}
+mod <- lm(n ~ wday, data = daily)
 
-# 从模型中得到更多的信息
+grid <- daily %>%
+  data_grid(wday) %>%
+  add_predictions(mod, "n")
+
+ggplot(daily, aes(wday, n)) +
+  geom_boxplot() +
+  geom_point(data = grid, colour = "red", size = 4)
+```
+
+去掉周末影响后的偏差分布情况：
+```{r}
+daily <- daily %>%
+  add_residuals(mod)
+daily
+daily %>%
+  ggplot(aes(date, resid)) +
+  geom_ref_line(h = 0) +
+  geom_line()
+```
+
+按 day of week 绘制残差曲线：
+```{r}
+ggplot(daily, aes(date, resid, colour = wday)) +
+  geom_ref_line(h = 0) +
+  geom_line()
+```
+
+可以看到如果不考虑特殊日期航班数特别低造成的异常值，
+主要是周六的残差不太理想。
+
+筛选出航班明显偏少的日子：
+```{r}
+daily %>%
+  filter(resid < -100)
+```
+
+不难看出主要是节假日期间航班数明显减少，这就给上述异常值了一个比较令人满意的解释。
+
+下面通过拟合平滑曲线观察航班残差的长期变化规律：
+```{r}
+daily %>%
+  ggplot(aes(date, resid)) +
+  geom_ref_line(h = 0) +
+  geom_line(colour = "grey50") +
+  geom_smooth(se = FALSE, span = 0.20)
+```
+
+总体来看，仅仅使用 day of week 预测航班数，存在1月和12月偏低，而5～9月偏高的问题，
+我们需要找到更多因素来解释航班数的变化。
+
+## 不同季节的影响
+
+只绘制周六航班的变化情况：
+```{r}
+daily %>%
+  filter(wday == "Sat") %>%
+  ggplot(aes(date, n)) +
+    geom_point() +
+    geom_line() +
+    scale_x_date(NULL, date_breaks = "1 month", date_labels = "%b")
+```
+
+周六航班的阶段性增长可能与季节有关，
+将它写出函数的形式：
+```{r}
+term <- function(date) {
+  cut(date,
+    breaks = ymd(20130101, 20130605, 20130825, 20140101),
+    labels = c("spring", "summer", "fall")
+  )
+}
+
+daily <- daily %>%
+  mutate(term = term(date))
+
+daily %>%
+  filter(wday == "Sat") %>%
+  ggplot(aes(date, n, colour = term)) +
+  geom_point(alpha = 1/3) +
+  geom_line() +
+  scale_x_date(NULL, date_breaks = "1 month", date_labels = "%b")
+```
+
+以它为标准分析航班数随 day of week 的变化情况：
+```{r}
+daily %>%
+  ggplot(aes(wday, n, colour = term)) +
+    geom_boxplot()
+```
+
+按不同的季节分类拟合：
+```{r}
+mod1 <- lm(n ~ wday, data = daily)
+mod2 <- lm(n ~ wday * term, data = daily)
+
+daily %>%
+  gather_residuals(without_term = mod1, with_term = mod2) %>%
+  ggplot(aes(date, resid, colour = model)) +
+    geom_line(alpha = 0.75)
+```
+
+将季节和 day of week 综合考虑后，残差有减小趋势，但不明显。
+
+将季节和 day of week 综合考虑下的预测航班数与实际航班数叠加展示：
+```{r}
+grid <- daily %>%
+  data_grid(wday, term) %>%
+  add_predictions(mod2, "n")
+
+grid
+
+ggplot(daily, aes(wday, n)) +
+  geom_boxplot() +
+  geom_point(data = grid, colour = "red") +
+  facet_wrap(~ term)
+```
+
+预测值类似于某一组合下的平均数，对照原始数据的 box plot 图不难发现，由于异常点的存在，扭曲了整体分布情况，平均值缺乏代表性，
+下面我们用对异常值容忍度比较高的 `MASS::rlm()` 函数再来拟合一次：
+```{r}
+mod3 <- MASS::rlm(n ~ wday * term, data = daily)
+
+daily %>%
+  add_residuals(mod3, "resid") %>%
+  ggplot(aes(date, resid)) +
+  geom_hline(yintercept = 0, size = 2, colour = "white") +
+  geom_line()
+```
+
+与上面的 `mod2` 模型相比，本模型的残差更贴近于0值，说明此模型比较好的描述了季节和 day-of-week 对航班数的影响。
+且由于某些未知因素影响，1、2月份的实际值比预测值偏低。
+
+## 使用更柔软的模型
+
+上面我们用线性模型结合领域知识分析了航班数的变化规律，
+如果给模型更多的灵活度，可以直观地从数据中提取更多的规律，
+下面我们用自然样条取代线性模型，看看有什么效果：
+```{r}
+library(splines)
+mod_ns <- MASS::rlm(n ~ wday * ns(date, 5), data = daily)
+
+daily %>%
+  data_grid(wday, date = seq_range(date, n = 13)) %>%
+  add_predictions(mod_ns) %>%
+  ggplot(aes(date, pred, colour = wday)) +
+    geom_line() +
+    geom_point()
+```
+
+图中表达的信息与上面的线性模型一致：
+
+* 工作日航班数显著多于周末航班数，表明航班主体是是商务飞行；
+
+* 周日的航班显著多于周六，说明很多人需要为周一的工作而提前在周末赶赴工作地点；
+
+* 从季节上看，秋冬季节的航班少于春夏季节的航班数量。
+
+* 周六的航班数随季节起伏较大，一个原因是春秋两季学校假期让很多家庭选择坐飞机度假，
+  另一个原因是圣诞节和元旦周六坐飞机出行的人数很多；
