@@ -299,6 +299,7 @@ ggplot(sim3, aes(x1, resid, colour = x2)) +
 
 基于 sim4 生成两个模型，以及各自的预测值：
 ```{r}
+sim4
 mod1 <- lm(y ~ x1 + x2, data = sim4)
 mod2 <- lm(y ~ x1 * x2, data = sim4)
 
@@ -321,13 +322,40 @@ ggplot(grid, aes(x1, x2)) +
 似乎差别不大，改为绘制等高线，`x2` 处于不同区间时 `x1` 的预测值趋势，
 以及 `x1` 处于不同区间时 `x2` 的预测值趋势：
 ```{r}
-ggplot(grid, aes(x1, pred, colour = x2, group = x2)) + 
+ggplot(grid, aes(x1, pred, colour = x2, group = x2)) +
   geom_line() +
   facet_wrap(~ model)
 ggplot(grid, aes(x2, pred, colour = x1, group = x1)) + 
   geom_line() +
   facet_wrap(~ model)
 ```
+
+由于 `mod1` 是线性模型，所以各条线之间是平行的，
+`mod2` 由于增加了交互项，各条线之间不再平行。
+
+这里为什么要用 `group` 参数？
+如果去掉这个参数，效果如下：
+```{r}
+ggplot(grid, aes(x1, pred, colour = x2)) +
+  geom_line() +
+  facet_wrap(~ model)
+ggplot(grid, aes(x1, pred, colour = x2)) +
+  geom_point() +
+  facet_wrap(~ model)
+ggplot(grid, aes(x1, pred, group = x2)) +
+  geom_line() +
+  facet_wrap(~ model)
+```
+
+可以看到，由于二维绘图无法展示包含两个特征的数据集，
+如果不使用 `group` 参数，`geom_line()` 会把 `x1` 作为唯一自变量，
+将所有点连在一起，这显然是不合理的（上面第一张图）。
+第二张图展示了数据的实际形态，解释了第一张图形成的原因。
+
+解决方法是使用 `group` 参数将隐藏的连续型特征 `x2` 转为类别变量（使用 binage 方法），
+然后分组 (group) 绘制（上面第三张图）。
+使用分组虽然能绘制 `x2` 各种情况下 `x1` 和 `pred` 之间的关系，
+但多条线之间没有视觉上的区分，所以一般与 `color` 或者 `shape` 联合使用。
 
 ### 变换
 

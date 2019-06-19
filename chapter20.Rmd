@@ -1,0 +1,192 @@
+---
+title: "Many models"
+output: html_notebook
+---
+
+本章介绍几种处理多个模型的方法：
+
+* 如何综合运用多个简单模型解释复杂数据集；
+
+* 使用列表特征（*list-column*）技术将任何数据存储在 data frame 中，例如用一列保存一个线性模型；
+
+* 使用 *broom* 包将模型转换为 tidy data，从而使用各种数据处理技术分析 tidy data；
+
+```{r}
+library(modelr)
+library(tidyverse)
+```
+
+# gapminder 数据集
+
+```{r}
+library(gapminder)
+gapminder
+```
+
+为每个国家绘制一条 *年——预期寿命* 关系曲线：
+```{r}
+gapminder %>%
+  ggplot(aes(year, lifeExp, group = country)) +
+    geom_line(alpha = 1/3)
+```
+
+以新西兰为例，使用前面介绍的 *模型-残差* 的方法分析年代和预期寿命间的关系：
+```{r}
+nz <- filter(gapminder, country == "New Zealand")
+nz %>%
+  ggplot(aes(year, lifeExp)) +
+  geom_line() +
+  ggtitle("Full data = ")
+
+nz_mod <- lm(lifeExp ~ year, data = nz)
+nz %>%
+  add_predictions(nz_mod) %>%
+  ggplot(aes(year, pred)) +
+  geom_line() +
+  ggtitle("Linear trend + ")
+
+nz %>%
+  add_residuals(nz_mod) %>%
+  ggplot(aes(year, resid)) +
+  geom_hline(yintercept = 0, colour = "white", size = 3) +
+  geom_line() +
+  ggtitle("Remaining pattern")
+```
+
+效果不错，现在的问题是，如何为每个国家创建分析模型？
+
+## 嵌套数据集
+
+为每个国家创建分析模型，需要从总体数据集中按 `country` 特征拆分出不同的子数据集，
+`tidyr::nest` 函数是个合适的工具：
+```{r}
+by_country <- gapminder %>% 
+  group_by(country, continent) %>% 
+  nest()
+
+by_country
+```
+
+新增加的特征 `data` 的每一行都是一个完整的 data frame（更准确地说是 tibble），
+例如我们要查看亚洲国家阿富汗的数据：
+```{r}
+by_country$data[[1]]
+```
+
+所以 `nest()` 的作用是将一个每行是一个观测（一个国家在某一年份的预期寿命）的 data frame
+转换成了每行是一个 data frame（某个国家在所有年份中的预期寿命）的 data frame。
+
+## 列表特征
+
+要为每个国家创建模型，首先将模型包装在一个函数里：
+```{r}
+country_model <- function(df) {
+  lm(lifeExp ~ year, data = df)
+}
+```
+
+然后用 `purrr::map()` 将函数应用到每个列表元素上：
+```{r}
+models <- map(by_country$data, country_model)
+```
+
+Data frame 最大的优点是能够将相关的信息放在一起，
+如果能够将分析模型放到 `by_country` 中，就实现了将数据和模型整合到了一个 data frame里，
+这正好可以通过 `dplyr::mutate` 函数实现：
+```{r}
+by_country <- by_country %>% 
+  mutate(model = map(data, country_model))
+by_country
+```
+
+这里 `map` 函数的 `data` 参数表示 `by_country$data`。
+
+这样就可以方便的对数据做筛选和排序了：
+```{r}
+by_country %>% 
+  filter(continent == "Europe")
+by_country %>% 
+  arrange(continent, country)
+```
+
+## 展开数据集
+
+为每个模型添加残差：
+```{r}
+by_country <- by_country %>% 
+  mutate(
+    resids = map2(data, model, add_residuals)
+  )
+by_country
+```
+
+要绘制每个模型的残差图，首先将嵌套数据集展开成普通数据集：
+```{r}
+resids <- unnest(by_country, resids)
+resids
+```
+
+为这个普通数据集绘制残差图：
+```{r}
+resids %>% 
+  ggplot(aes(year, resid)) +
+    geom_line(aes(group = country), alpha = 1 / 3) + 
+    geom_smooth(se = FALSE)
+```
+
+按洲分组绘制残差图：
+```{r}
+resids %>% 
+  ggplot(aes(year, resid, group = country)) +
+    geom_line(alpha = 1 / 3) + 
+    facet_wrap(~continent)
+```
+
+不难发现非洲的残差比较高，说明现有的线性模型并不能完美解释这个大洲的预期寿命变化趋势。
+
+## 模型质量评估
+
+```{r}
+library(broom)
+glance(nz_mod)
+```
+
+采用 `mutata() + unnest()` 可以将上面的方法扩展到整个数据集上：
+```{r}
+by_country %>% 
+  mutate(glance = map(model, broom::glance)) %>% 
+  unnest(glance)
+```
+
+去掉其中的列表特征列：
+```{r}
+glance <- by_country %>% 
+  mutate(glance = map(model, broom::glance)) %>% 
+  unnest(glance, .drop = TRUE)
+glance
+```
+
+对所有模型按质量排序：
+```{r}
+glance %>% 
+  arrange(r.squared)
+```
+
+似乎所有模型质量差的国家都在非洲，用散点图验证一下：
+```{r}
+glance %>% 
+  ggplot(aes(continent, r.squared)) + 
+    geom_jitter(width = 0.3)
+```
+
+重点研究模型质量最差（$R^2 \lt 0.25$）的几个国家：
+```{r}
+bad_fit <- filter(glance, r.squared < 0.25)
+
+gapminder %>% 
+  semi_join(bad_fit, by = "country") %>% 
+  ggplot(aes(year, lifeExp, colour = country)) +
+    geom_line()
+```
+
+不难推测1994年卢旺达种族大屠杀和近几十年艾滋病肆虐可能是造成这些国家人口预期寿命反常下降的重要原因。

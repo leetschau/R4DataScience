@@ -151,6 +151,12 @@ Version: 1.2.7
 Hash: 319b4708e43cc1a8672a067674b022ce
 Requires: Rcpp
 
+Package: gapminder
+Source: CRAN
+Version: 0.3.0
+Hash: 48afba107fd1a0c550bd823711e952b5
+Requires: tibble
+
 Package: generics
 Source: CRAN
 Version: 0.0.2
