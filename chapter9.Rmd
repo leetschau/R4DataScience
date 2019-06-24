@@ -1,0 +1,97 @@
+---
+title: "Tidy Data"
+output: html_notebook
+---
+
+# Case Study
+
+本示例通过对 *tidyverse* 的世界卫生组织 (WHO) 对结核病病例数据集的清洗，展示了本章介绍的各种数据清洗方法。
+
+加载 `who` 数据集：
+```{r}
+library(tidyverse)
+who
+```
+
+将各种不同的病例种类合并到一个通用的 `key` 特征下：
+```{r}
+who1 <- who %>%
+  gather(new_sp_m014:newrel_f65, key = "key", value = "cases", na.rm = TRUE)
+who1
+```
+
+观察各种类型病例所占比例：
+```{r}
+who1 %>% count(key)
+```
+
+根据业务知识，`key` 列值的生成方法（各部分间以下划线分隔）；
+
+* 第一部分：`new` 表示新病例，`newrel` 应该是 `new_rel`；
+
+* 第二部分：`sp`, `sn` 等表示结核病的类型；
+
+* 第三部分：用一个字母表示患者性别，`f` 表示女性，`m` 表示男性；
+
+* 最后的数字表示患者年龄段，见下面的说明。
+
+数字表示的含义：
+
+* 014: 0 ~ 14 岁；
+
+* 1524: 15 ~ 24 岁；
+
+* 2534: 25 ~ 34 岁；
+
+* 3544: 35 ~ 44 岁；
+
+* 4554: 45 ~ 54 岁；
+
+* 5564: 55 ~ 64 岁；
+
+* 65: 65 岁及以上。
+
+修正 `newrel`，改为标准格式 `new_rel`:
+```{r}
+who2 <- who1 %>%
+  mutate(key = stringr::str_replace(key, 'newrel', 'new_rel'))
+who2
+```
+
+拆分此列，第一步：
+```{r}
+who3 <- who2 %>%
+  separate(key, c("new", "type", "sexage"), sep = "_")
+who3 
+```
+
+检查 `new` 列是不是常数（全部是 `new`）：
+```{r}
+who3 %>% count(new)
+```
+
+与 `who3` 长度相等，说明此列是常数，可以去掉，同时去掉冗余信息 `iso2` 和 `iso3` 列：
+```{r}
+who4 <- who3 %>%
+  select(-new, -iso2, -iso3)
+```
+
+接下来拆分 `sexage` 列，取出第一个字母作为性别，剩余字符作为年龄：
+```{r}
+who5 <- who4 %>%
+  separate(sexage, c("sex", "age"), sep = 1)
+who5
+```
+
+到此数据集符合 tidy 标准了。
+
+将上面的处理流程连接起来：
+```{r}
+who %>%
+  gather(key, value, new_sp_m014:newrel_f65, na.rm = TRUE) %>%
+  mutate(key = stringr::str_replace(key, "newrel", "new_rel")) %>%
+  separate(key, c("new", "var", "sexage")) %>%
+  select(-new, -iso2, -iso3) %>%
+  separate(sexage, c("sex", "age"), sep = 1)
+```
+
