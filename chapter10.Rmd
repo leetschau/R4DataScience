@@ -1,0 +1,73 @@
+---
+title: "Ralational Data"
+output: html_notebook
+---
+
+前面几章研究了如何处理一个数据集，以及如何处理数据集内部的关系，包括特征间关系，观测间关系，
+本章主要研究多个数据集之间的关系。
+```{r}
+library(tidyverse)
+library(nycflights13)
+```
+
+关系操作包含3种类型：
+
+* Mutating joins;
+
+* Filtering joins;
+
+* Set operations.
+
+数据表 `flights` 以及与它相关的各个表：
+```{r}
+flights
+airlines
+airports
+planes
+weather
+```
+
+检查某个 feature 是否可以作为主键（是否有重复）的方法是检查 `count` 此特征后，
+是否有多于1个的观测：
+```{r}
+planes %>%
+  count(tailnum) %>%
+  filter(n > 1)
+
+weather %>%
+  count(year, month, day, hour, origin) %>%
+  filter(n > 1)
+```
+
+可知 `planes$tailnum` 可以作为主键，`weather` 的 `year, month, day, hour, origin` 组合则不能做主键。
+
+# Mutating joins
+
+首先生成一个比较窄的表：
+```{r}
+flights2 <- flights %>%
+  select(year:day, hour, origin, dest, tailnum, carrier)
+flights2
+```
+
+进行 `join` 操作：
+```{r}
+flights2 %>%
+  select(-origin, -dest) %>%
+  left_join(airlines, by = "carrier")
+```
+
+# Filtering joins
+
+```{r}
+top_dest <- flights %>%
+  count(dest, sort = TRUE) %>%
+  head(10)
+top_dest
+```
+
+```{r}
+flights %>%
+  filter(dest %in% top_dest$dest)
+```
+

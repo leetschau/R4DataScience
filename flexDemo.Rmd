@@ -1,0 +1,45 @@
+---
+title: "Demo 1"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    vertical_layout: fill
+---
+
+Sidebar {.sidebar}
+=====================================
+
+Link to [Page 3](#page-3)
+
+Home {data-icon="fa-solar-panel"}
+===================================== 
+
+You can link to a dashboard page with either of the following syntaxes:
+
+[Page II]
+
+[Page Two](#page-ii)
+
+The second syntax is used when you want a custom name for the link 
+(rather than just using the page title).
+
+### Chart A
+    
+```{r}
+```
+
+Page II
+=====================================     
+
+### Chart B
+    
+```{r}
+```
+
+Page 3 {.hidden}
+=====================================
+
+### Chart C
+    
+```{r}
+```

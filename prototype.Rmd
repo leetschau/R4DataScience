@@ -1,0 +1,86 @@
+---
+title: "Prototyping with R"
+output: html_notebook
+---
+
+原型统一软件开发团队中需求、开发、测试等各角色语言，明确功能定义和开发目标，
+对保证软件质量、控制开发维护成本发挥着重要作用，R 社区提供了制作原型的两款工具：
+
+* [shinydashboard](http://rstudio.github.io/shinydashboard/):
+  使用 Shiny UI 语法，需要一定的编程基础，与后台数据无缝对接，适合于创建高保真原型或者动态数据应用；
+
+* [flexdashboard](https://rmarkdown.rstudio.com/flexdashboard/):
+  主要用于开发静态的、非交互的结果展示页面。
+  使用 Rmd 语法，易上手，开发速度快，布局方便，可以通过 Shiny 生成动态组件、图表；
+
+# Shiny App
+
+Shiny App 是 R 社区构建 Web 应用的首选方式，下面是一个简单的交互式数据应用：
+```{r, eval=FALSE}
+server <- function(input, output) {
+  output$distPlot <- renderPlot({
+    hist(rnorm(input$obs), col = 'darkgray', border = 'white')
+  })
+}
+
+ui <- fluidPage(
+  sidebarLayout(
+    sidebarPanel(
+      sliderInput("obs", "Number of observations:", min = 10, max = 500, value = 100)
+    ),
+    mainPanel(plotOutput("distPlot"))
+  )
+)
+
+shinyApp(ui = ui, server = server)
+```
+
+虽然简单，但完整呈现了一个 Shiny App 的主体架构：
+
+* 应用服务定义：在函数 `server` 中定义；
+
+* UI 定义：在 `fluidPage` 对象 `ui` 中定义；
+
+* 启动服务：可以像上面一样直接启动，
+  也可以通过专门的函数启动：`app <- shinyApp(ui, server); runApp(app)`
+
+每个 Shiny App 保存在一个单独的文件夹中，文件夹名称体现 App 的含义，
+例如 `myApp`，用 `runApp("myApp")` 启动服务。
+根据不同的复杂度，可以采用两种不同的文件结构：
+
+* 单文件模式：将上面三部分都保存在文件 `app.R` 中，直接运行此脚本启动服务；
+
+* 双文件方式：如果界面复杂，可以将上述服务定义保存在 `server.R` 中，
+  将 UI 定义保存在 `ui.R` 中。
+
+应用和文件架构详见[App formats and launching apps](https://shiny.rstudio.com/articles/app-formats.html)，
+运行下面的代码运行 `shiny` 包自带的示例应用：
+```{r, eval=FALSE}
+runExample("01_hello")      # a histogram
+runExample("02_text")       # tables and data frames
+runExample("03_reactivity") # a reactive expression
+runExample("04_mpg")        # global variables
+runExample("05_sliders")    # slider bars
+runExample("06_tabsets")    # tabbed panels
+runExample("07_widgets")    # help text and submit buttons
+runExample("08_html")       # Shiny app built from HTML
+runExample("09_upload")     # file upload wizard
+runExample("10_download")   # file download wizard
+runExample("11_timer")      # an automated timer
+```
+
+## 发布应用
+
+* Github: 将 App 作为一个 git repo 发布到 Github 上，
+  使用者通过 `runGitHub( "<your repository name>", "<your user name>")` 启动服务；
+
+* Gist: 将 `app.R` 文件内容发布为一个 gist，
+  使用者通过 `runGist("eb3470beb1c0252bd0289cbc89bcf36f")` 启动服务，参数是 gist ID；
+
+* Shinyapps.io: 发布到 shinyapp.io 上；
+
+以上三种方法，前两种需要使用者安装 RStudio（至少 R console），
+第三种使用者不需要安装 R，只要在浏览器里输入 Web app 地址就可以使用了。
+
+# FlexDashboard
+
