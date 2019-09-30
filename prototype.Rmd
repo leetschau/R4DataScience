@@ -82,5 +82,7 @@ runExample("11_timer")      # an automated timer
 以上三种方法，前两种需要使用者安装 RStudio（至少 R console），
 第三种使用者不需要安装 R，只要在浏览器里输入 Web app 地址就可以使用了。
 
+参考 [Shiny tutorial](https://shiny.rstudio.com/tutorial/)。
+
 # FlexDashboard
 
